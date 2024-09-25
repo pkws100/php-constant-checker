@@ -7,7 +7,7 @@
   "icon": "images/logo.gif", 
   "repository": {
     "type": "git",
-    "url": "https://github.com/pow100/php-constant-checker.git"
+    "url": "https://github.com/pkws100/php-constant-checker"
   },
   "engines": {
     "vscode": "^1.93.0"

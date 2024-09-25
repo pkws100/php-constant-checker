@@ -15,7 +15,7 @@ Diese Erweiterung für Visual Studio Code überprüft die Verwendung von PHP-Kon
 1. **Repository klonen**:
 
 ```bash  
-    git clone https://github.com/pow100/php-konstanten-checker.git
+    git clone https://github.com/pkws100/php-constant-checker
 
 ```
 2. **Ahängigkeiten installieren**:
