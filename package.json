@@ -1,0 +1,62 @@
+{
+  "name": "php-constant-checker",
+  "displayName": "PHP Constant Checker",
+  "description": "Checks PHP constants in a separate path with custom constant declaration function.",
+  "version": "0.0.1",
+  "publisher": "PK-WS.de",
+  "icon": "images/logo.gif", 
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pow100/php-constant-checker.git"
+  },
+  "engines": {
+    "vscode": "^1.93.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:php"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "php-constant-checker.checkConstants",
+        "title": "PHP Constant Checker: Check Constants"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "PHP Constant Checker",
+      "properties": {
+        "constantChecker.constantFile": {
+          "type": "string",
+          "default": "C:/inetpub/pkws_wwwroot/Firmware/SCR/constant.php",
+          "description": "Path to the file containing PHP constants."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext .ts",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.93.0",
+    "@types/mocha": "^10.0.7",
+    "@types/node": "^20.x",
+    "@typescript-eslint/eslint-plugin": "^8.3.0",
+    "@typescript-eslint/parser": "^8.3.0",
+    "eslint": "^9.9.1",
+    "typescript": "^5.5.4",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1"
+  }
+}
