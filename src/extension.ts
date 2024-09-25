@@ -23,30 +23,38 @@ const undefinedConstantDecoration = vscode.window.createTextEditorDecorationType
     textDecoration: 'underline; color: red; font-weight: bold;'
 });
 
+
+interface ConstantInfo {
+    name: string;
+    line: number;
+}
+
 /**
  * Lädt alle Konstanten aus der angegebenen Datei, die mit define_ex definiert wurden.
  * 
  * @param filePath - Der Pfad zur Datei, aus der die Konstanten geladen werden sollen.
  * @returns Ein Array von Konstantennamen als Strings.
  */
-function loadConstants(filePath: string): string[] {
-    const constants: string[] = [];
+function loadConstants(filePath: string): ConstantInfo[] {
+    const constants: ConstantInfo[] = [];
     try {
-        // Lese den Inhalt der Datei
         const fileContent = fs.readFileSync(filePath, 'utf-8');
+        const lines = fileContent.split(/\r?\n/);
+
         // Regex zum Finden von Konstantendefinitionen mit define_ex
-        const regex = /define_ex\s*\(\s*['"]([A-Za-z0-9_]+)['"]/g;
-        let match;
-        // Iteriere über alle gefundenen Konstanten
-        while ((match = regex.exec(fileContent)) !== null) {
-            constants.push(match[1]);
+        const regex = /define_ex\s*\(\s*['"]([A-Za-z0-9_]+)['"]/;
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const match = regex.exec(line);
+            if (match) {
+                constants.push({
+                    name: match[1],
+                    line: i + 1 // Zeilennummer (1-basiert)
+                });
+            }
         }
     } catch (error) {
-        if (error instanceof Error) {
-            vscode.window.showErrorMessage(`Fehler beim Laden der Konstanten aus ${filePath}: ${error.message}`);
-        } else {
-            vscode.window.showErrorMessage(`Fehler beim Laden der Konstanten aus ${filePath}: Unbekannter Fehler`);
-        }
+        vscode.window.showErrorMessage(`Fehler beim Laden der Konstanten aus ${filePath}: ${error instanceof Error ? error.message : 'Unbekannter Fehler'}`);
     }
     return constants;
 }
@@ -59,16 +67,16 @@ function loadConstants(filePath: string): string[] {
  * @returns Der maskierte PHP-Code.
  */
 function maskCommentsAndStrings(text: string): string {
-    return text.replace(/\/\/.*|\/\*[\s\S]*?\*\/|#.*|(['"])(?:\\.|[^\\])*?\1/g, (match) => ' '.repeat(match.length));
+    return text.replace(/\/\/.*|\/\*[\s\S]*?\*\/|#.*|(['"`])(?:\\.|[^\\])*?\1/g, (match) => ' '.repeat(match.length));
 }
 
 /**
  * Wendet Dekorationen auf die definierten und undefinierten Konstanten im Dokument an.
  * 
  * @param document - Das aktuelle Textdokument.
- * @param constants - Ein Array von definierten Konstantennamen.
+ * @param constants - Ein Array von definierten Konstanten mit Informationen.
  */
-function applyDecorations(document: vscode.TextDocument, constants: string[]) {
+function applyDecorations(document: vscode.TextDocument, constants: ConstantInfo[]) {
     // Finde den aktiven Editor für das Dokument
     const editor = vscode.window.visibleTextEditors.find(e => e.document === document);
     if (!editor) {
@@ -77,16 +85,20 @@ function applyDecorations(document: vscode.TextDocument, constants: string[]) {
 
     const text = document.getText();
 
-    // Regex zum Finden von PHP-Codeblöcken
-    //const phpTagRegex = /<\?php[\s\S]*?\?>|<\?=([\s\S]*?)\?>/g;
-	// Aktualisierte Regex zum Finden von PHP-Codeblöcken
+    // Aktualisierte Regex zum Finden von PHP-Codeblöcken
     const phpTagRegex = /<\?php[\s\S]*?(?:\?>|$)|<\?=([\s\S]*?)(?:\?>|$)/g;
-						
+
     let phpMatch;
 
     // Arrays zum Speichern der Bereiche für definierte und undefinierte Konstanten
     const definedRanges: vscode.Range[] = [];
     const undefinedRanges: vscode.Range[] = [];
+
+    // Erstellen einer Map für schnellen Zugriff
+    const constantMap = new Map<string, ConstantInfo>();
+    constants.forEach(constant => {
+        constantMap.set(constant.name, constant);
+    });
 
     // Iteriere über alle PHP-Codeblöcke
     while ((phpMatch = phpTagRegex.exec(text)) !== null) {
@@ -119,10 +131,6 @@ function applyDecorations(document: vscode.TextDocument, constants: string[]) {
                 // Objektzugriff (->), ausschließen
                 exclude = true;
             }
-            // Entfernen Sie die folgende Bedingung, um nicht fälschlicherweise Konstanten auszuschließen
-            // else if (/[A-Za-z0-9_]$/.test(precedingChars)) {
-            //     exclude = true;
-            // }
 
             if (exclude) {
                 continue;
@@ -143,7 +151,8 @@ function applyDecorations(document: vscode.TextDocument, constants: string[]) {
             const range = new vscode.Range(startPos, endPos);
 
             // Überprüfe, ob die Konstante definiert ist, und füge sie der entsprechenden Liste hinzu
-            if (constants.includes(constant)) {
+            const constantInfo = constantMap.get(constant);
+            if (constantInfo) {
                 definedRanges.push(range);
             } else {
                 undefinedRanges.push(range);
@@ -155,6 +164,45 @@ function applyDecorations(document: vscode.TextDocument, constants: string[]) {
     editor.setDecorations(definedConstantDecoration, definedRanges);
     editor.setDecorations(undefinedConstantDecoration, undefinedRanges);
 }
+
+
+/**
+ * HoverProvider für Konstanten
+ */
+class ConstantHoverProvider implements vscode.HoverProvider {
+    private constantMap: Map<string, ConstantInfo>;
+    private constantFilePath: string;
+
+    constructor(constants: ConstantInfo[], constantFilePath: string) {
+        this.constantMap = new Map<string, ConstantInfo>();
+        constants.forEach(constant => {
+            this.constantMap.set(constant.name, constant);
+        });
+        this.constantFilePath = constantFilePath;
+    }
+
+    public updateConstants(newConstants: ConstantInfo[]) {
+        this.constantMap.clear();
+        newConstants.forEach(constant => {
+            this.constantMap.set(constant.name, constant);
+        });
+    }
+
+    public provideHover(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
+        const range = document.getWordRangeAtPosition(position, /\b[A-Z][A-Z0-9_]*\b/);
+        if (range) {
+            const word = document.getText(range);
+            const constantInfo = this.constantMap.get(word);
+            if (constantInfo) {
+                const markdownString = new vscode.MarkdownString(`Die Konstante \`${word}\` ist definiert in [${this.constantFilePath}:${constantInfo.line}](${vscode.Uri.file(this.constantFilePath).with({ fragment: `L${constantInfo.line}` })}).`);
+                markdownString.isTrusted = true; // Erlaubt Links
+                return new vscode.Hover(markdownString, range);
+            }
+        }
+        return null;
+    }
+}
+
 
 /**
  * Diese Funktion wird aufgerufen, wenn die Erweiterung aktiviert wird.
@@ -171,7 +219,30 @@ export function activate(context: vscode.ExtensionContext) {
     let filePath = vscode.workspace.getConfiguration('constantChecker').get('constantFile', 'C:/inetpub/pkws_wwwroot/Firmware/SCR/constant.php');
 
     // Laden der Konstanten aus der angegebenen Datei
-    const constants = loadConstants(filePath);
+    let constants = loadConstants(filePath);
+
+    // Erstellen Sie eine Instanz des HoverProviders
+    const hoverProvider = new ConstantHoverProvider(constants, filePath);
+
+    // Registrieren Sie den HoverProvider für PHP-Dateien
+    context.subscriptions.push(vscode.languages.registerHoverProvider('php', hoverProvider));
+
+    // Watcher für die constant.php-Datei
+    const constantFileWatcher = vscode.workspace.createFileSystemWatcher(filePath);
+    context.subscriptions.push(constantFileWatcher);
+
+    constantFileWatcher.onDidChange(() => {
+        // Konstanten neu laden
+        constants = loadConstants(filePath);
+        // Aktualisieren Sie den HoverProvider
+        hoverProvider.updateConstants(constants);
+        // Aktualisieren Sie auch die Dekorationen
+        vscode.workspace.textDocuments.forEach(document => {
+            if (document.languageId === 'php' || document.fileName.endsWith('.php')) {
+                applyDecorations(document, constants);
+            }
+        });
+    });
 
     // Event-Listener für das Öffnen von Textdokumenten
     vscode.workspace.onDidOpenTextDocument(document => {
@@ -205,7 +276,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Event-Listener für den Wechsel des aktiven Editors
     vscode.window.onDidChangeActiveTextEditor(editor => {
-        if (editor && editor.document.languageId === 'php'  ) {
+        if (editor && (editor.document.languageId === 'php' || editor.document.fileName.endsWith('.php')) ) {
             applyDecorations(editor.document, constants);
         }
     });
