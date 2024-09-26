@@ -2,9 +2,15 @@
   "name": "php-constant-checker",
   "displayName": "PHP Constant Checker",
   "description": "Checks PHP constants in a separate path with custom constant declaration function.",
-  "version": "0.0.1",
-  "publisher": "PK-WS.de",
+  "version": "0.0.5",
+  "publisher": "pkwsde",
   "icon": "images/logo.gif", 
+  "author": {
+    "name": "Christian Pittroff",
+    "email": "info@pk-ws.de"
+},
+  "license": "SEE LICENSE IN LICENSE.md",
+  "homepage": "https://pk-ws.de",
   "repository": {
     "type": "git",
     "url": "https://github.com/pkws100/php-constant-checker"
@@ -21,6 +27,9 @@
     "onLanguage:php"
   ],
   "main": "./out/extension.js",
+  "extensionKind": [
+      "workspace"
+  ],
   "contributes": {
     "commands": [
       {
@@ -30,12 +39,76 @@
     ],
     "configuration": {
       "type": "object",
-      "title": "PHP Constant Checker",
+      "title": "PHP Constant Checker Einstellungen",
       "properties": {
-        "constantChecker.constantFile": {
+        "phpConstantChecker.constantFile": { 
           "type": "string",
+          "scope": "window",
           "default": "C:/inetpub/pkws_wwwroot/Firmware/SCR/constant.php",
-          "description": "Path to the file containing PHP constants."
+          "description": "Pfad zur Datei, die die PHP-Konstanten enthält."
+        },
+          "phpConstantChecker.definedConstantDecoration": {
+          "type": "object",
+          "scope": "window",
+          "default": {
+            "textDecoration": "underline",
+            "color": "green",
+            "fontWeight": "bold"
+          },
+          "description": "Dekoration für definierte Konstanten."
+        },
+        "phpConstantChecker.undefinedConstantDecoration": {
+          "type": "object",
+          "scope": "window",
+          "default": {
+            "textDecoration": "underline",
+            "color": "red",
+            "fontWeight": "bold"
+          },
+          "description": "Dekoration für undefinierte Konstanten."
+        },
+        "phpConstantChecker.excludedConstants": {
+          "type": "array",
+          "scope": "window",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "E_ERROR",
+            "E_WARNING",
+            "E_PARSE",
+            "E_NOTICE",
+            "E_CORE_ERROR",
+            "E_CORE_WARNING",
+            "E_COMPILE_ERROR",
+            "E_COMPILE_WARNING",
+            "E_USER_ERROR",
+            "E_USER_WARNING",
+            "E_USER_NOTICE",
+            "E_STRICT",
+            "E_RECOVERABLE_ERROR",
+            "E_DEPRECATED",
+            "E_USER_DEPRECATED",
+            "E_ALL",
+            "PHP_VERSION",
+            "PHP_OS",
+            "PHP_EOL",
+            "PHP_INT_MAX",
+            "PHP_INT_MIN",
+            "PHP_FLOAT_MAX",
+            "PHP_FLOAT_MIN",
+            "PHP_SAPI",
+            "_SERVER",
+            "_POST",
+            "_GET",
+            "_FILES",
+            "_COOKIE",
+            "_SESSION",
+            "_REQUEST",
+            "_ENV",
+            "REQUEST_METHOD"
+          ],
+          "description": "Liste der PHP-Build-In-Konstanten, die nicht als undefiniert markiert werden sollen."
         }
       }
     }

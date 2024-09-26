@@ -29,7 +29,10 @@ const vscode = __importStar(require("vscode"));
 const fs = __importStar(require("fs"));
 // Diagnose-Sammlung für unsere Erweiterung
 let diagnosticCollection;
-// Liste der PHP-Build-In-Konstanten, die nicht als undefiniert markiert werden sollen
+let definedConstantDecoration;
+let undefinedConstantDecoration;
+// Liste der PHP-Build-In-Konstanten, die nicht als undefiniert markiert werden sollen //
+/*
 const phpBuiltInConstants = [
     'E_ERROR', 'E_WARNING', 'E_PARSE', 'E_NOTICE', 'E_CORE_ERROR', 'E_CORE_WARNING',
     'E_COMPILE_ERROR', 'E_COMPILE_WARNING', 'E_USER_ERROR', 'E_USER_WARNING',
@@ -37,14 +40,38 @@ const phpBuiltInConstants = [
     'E_USER_DEPRECATED', 'E_ALL', 'PHP_VERSION', 'PHP_OS', 'PHP_EOL', 'PHP_INT_MAX',
     'PHP_INT_MIN', 'PHP_FLOAT_MAX', 'PHP_FLOAT_MIN', 'PHP_SAPI', '_SERVER', '_POST',
     '_GET', '_FILES', '_COOKIE', '_SESSION', '_REQUEST', '_ENV', 'REQUEST_METHOD'
-];
+];*/
 // Definieren der Dekorationstypen für definierte und undefinierte Konstanten
-const definedConstantDecoration = vscode.window.createTextEditorDecorationType({
-    textDecoration: 'underline; color: green; font-weight: bold;'
-});
-const undefinedConstantDecoration = vscode.window.createTextEditorDecorationType({
-    textDecoration: 'underline; color: red; font-weight: bold;'
-});
+function createDecorations() {
+    const config = vscode.workspace.getConfiguration('phpConstantChecker');
+    const definedDecorationSettings = config.get('definedConstantDecoration', {
+        textDecoration: 'underline',
+        color: 'green',
+        fontWeight: 'bold'
+    });
+    const undefinedDecorationSettings = config.get('undefinedConstantDecoration', {
+        textDecoration: 'underline',
+        color: 'red',
+        fontWeight: 'bold'
+    });
+    // Vorhandene Dekorationen entsorgen
+    if (definedConstantDecoration) {
+        definedConstantDecoration.dispose();
+    }
+    if (undefinedConstantDecoration) {
+        undefinedConstantDecoration.dispose();
+    }
+    definedConstantDecoration = vscode.window.createTextEditorDecorationType({
+        textDecoration: definedDecorationSettings.textDecoration,
+        color: definedDecorationSettings.color,
+        fontWeight: definedDecorationSettings.fontWeight
+    });
+    undefinedConstantDecoration = vscode.window.createTextEditorDecorationType({
+        textDecoration: undefinedDecorationSettings.textDecoration,
+        color: undefinedDecorationSettings.color,
+        fontWeight: undefinedDecorationSettings.fontWeight
+    });
+}
 /**
  * Lädt alle Konstanten aus der angegebenen Datei, die mit define_ex definiert wurden.
  *
@@ -90,7 +117,7 @@ function maskCommentsAndStrings(text) {
  * @param document - Das aktuelle Textdokument.
  * @param constants - Ein Array von definierten Konstanten mit Informationen.
  */
-function applyDecorations(document, constants) {
+function applyDecorations(document, constants, excludedConstants) {
     // Finde den aktiven Editor für das Dokument
     const editor = vscode.window.visibleTextEditors.find(e => e.document === document);
     if (!editor) {
@@ -145,7 +172,7 @@ function applyDecorations(document, constants) {
                 continue;
             }
             // PHP-Build-In-Konstanten ignorieren
-            if (phpBuiltInConstants.includes(constant)) {
+            if (excludedConstants.includes(constant)) {
                 continue;
             }
             const startPos = document.positionAt(constantStartIndex);
@@ -206,16 +233,22 @@ class ConstantHoverProvider {
  */
 function activate(context) {
     // Erstellen einer eigenen DiagnosticCollection für unsere Erweiterung
-    diagnosticCollection = vscode.languages.createDiagnosticCollection('constantChecker');
+    diagnosticCollection = vscode.languages.createDiagnosticCollection('phpConstantChecker');
     context.subscriptions.push(diagnosticCollection);
     // Standardpfad zur Konstantendatei (kann über die Einstellungen überschrieben werden)
-    let filePath = vscode.workspace.getConfiguration('constantChecker').get('constantFile', 'C:/inetpub/pkws_wwwroot/Firmware/SCR/constant.php');
+    //let filePath = vscode.workspace.getConfiguration('phpConstantChecker').get('constantFile', 'C:/inetpub/pkws_wwwroot/Firmware/SCR/constant.php');
+    // Einstellungen laden
+    const config = vscode.workspace.getConfiguration('phpConstantChecker');
+    let filePath = config.get('constantFile', 'C:/inetpub/pkws_wwwroot/Firmware/SCR/constant.php');
+    let excludedConstants = config.get('excludedConstants', []);
     // Laden der Konstanten aus der angegebenen Datei
     let constants = loadConstants(filePath);
     // Erstellen Sie eine Instanz des HoverProviders
     const hoverProvider = new ConstantHoverProvider(constants, filePath);
     // Registrieren Sie den HoverProvider für PHP-Dateien
     context.subscriptions.push(vscode.languages.registerHoverProvider('php', hoverProvider));
+    // Dekorationen erstellen
+    createDecorations();
     // Watcher für die constant.php-Datei
     const constantFileWatcher = vscode.workspace.createFileSystemWatcher(filePath);
     context.subscriptions.push(constantFileWatcher);
@@ -227,40 +260,60 @@ function activate(context) {
         // Aktualisieren Sie auch die Dekorationen
         vscode.workspace.textDocuments.forEach(document => {
             if (document.languageId === 'php' || document.fileName.endsWith('.php')) {
-                applyDecorations(document, constants);
+                applyDecorations(document, constants, excludedConstants);
             }
         });
     });
     // Event-Listener für das Öffnen von Textdokumenten
     vscode.workspace.onDidOpenTextDocument(document => {
         if (document.languageId === 'php' || document.fileName.endsWith('.php')) {
-            applyDecorations(document, constants);
+            applyDecorations(document, constants, excludedConstants);
         }
     });
     // Event-Listener für Änderungen an Textdokumenten
     vscode.workspace.onDidChangeTextDocument(event => {
         const document = event.document;
         if (document.languageId === 'php' || document.fileName.endsWith('.php')) {
-            applyDecorations(document, constants);
+            applyDecorations(document, constants, excludedConstants);
         }
     });
     // Anwenden der Dekorationen auf alle geöffneten PHP-Dokumente beim Start der Erweiterung
     vscode.workspace.textDocuments.forEach(document => {
         if (document.languageId === 'php' || document.fileName.endsWith('.php')) {
-            applyDecorations(document, constants);
+            applyDecorations(document, constants, excludedConstants);
         }
     });
     // Anwenden der Dekorationen auf alle sichtbaren Editoren beim Start der Erweiterung
     vscode.window.visibleTextEditors.forEach(editor => {
         const document = editor.document;
         if (document.languageId === 'php' || document.fileName.endsWith('.php')) {
-            applyDecorations(document, constants);
+            applyDecorations(document, constants, excludedConstants);
         }
     });
     // Event-Listener für den Wechsel des aktiven Editors
     vscode.window.onDidChangeActiveTextEditor(editor => {
         if (editor && (editor.document.languageId === 'php' || editor.document.fileName.endsWith('.php'))) {
-            applyDecorations(editor.document, constants);
+            applyDecorations(editor.document, constants, excludedConstants);
+        }
+    });
+    // Event-Listener für Änderungen an den Einstellungen
+    vscode.workspace.onDidChangeConfiguration(event => {
+        if (event.affectsConfiguration('phpConstantChecker')) {
+            // Aktualisieren Sie die Einstellungen
+            filePath = config.get('constantFile', filePath);
+            excludedConstants = config.get('excludedConstants', []);
+            // Dekorationen neu erstellen
+            createDecorations();
+            // Konstanten neu laden
+            constants = loadConstants(filePath);
+            // Aktualisieren Sie den HoverProvider
+            hoverProvider.updateConstants(constants);
+            // Aktualisieren Sie die Dekorationen
+            vscode.workspace.textDocuments.forEach(document => {
+                if (document.languageId === 'php' || document.fileName.endsWith('.php')) {
+                    applyDecorations(document, constants, excludedConstants);
+                }
+            });
         }
     });
     // Optionale Informationsnachricht nach dem Start der Erweiterung
